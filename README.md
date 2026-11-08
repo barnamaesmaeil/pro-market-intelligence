@@ -100,4 +100,4 @@ pnpm android:apk
 
 ## ساخت APK فقط با گوشی
 
-برای اجرای build در GitHub Actions از مرورگر گوشی، بدون نصب SDK یا Termux روی گوشی و بدون اشتراک Capawesome، راهنمای [PHONE_ANDROID_BUILD.md](PHONE_ANDROID_BUILD.md) و workflow آماده‌ی [.github/workflows/android-apk.yml](.github/workflows/android-apk.yml) را ببینید. **workflow هنوز در حساب GitHub اجرا نشده و APK تولیدشده‌ای وجود ندارد.** آدرس پایدار HTTPS برنامه نیز پیش‌نیاز build است.
+برای اجرای build در GitHub Actions از مرورگر گوشی، بدون نصب SDK یا Termux روی گوشی و بدون اشتراک Capawesome، راهنمای [PHONE_ANDROID_BUILD.md](PHONE_ANDROID_BUILD.md) و workflow آماده‌ی [.github/workflows/android-apk.yml](.github/workflows/android-apk.yml) را ببینید. **workflow هنوز در حساب GitHub اجرا نشده و APK تولیدشده‌ای وجود ندارد.** آدرس پایدار HTTPS برنامه نیز پیش‌نیاز build است؛ مراحل انتشار وب و تنظیم `PMI_APP_URL` در [DEPLOY.md](DEPLOY.md) آمده است.
