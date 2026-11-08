@@ -1,0 +1,152 @@
+name: Build Pro Market Intelligence APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    name: Build debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the private repository
+        uses: actions/checkout@v4
+
+      - name: Find and unpack the source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s package.json && -s pnpm-lock.yaml && -s capacitor.config.ts && -s android/gradlew ]]; then
+            APP_ROOT="$GITHUB_WORKSPACE"
+          else
+            SOURCE_ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -iname '*.zip' -print -quit)"
+            if [[ -z "$SOURCE_ZIP" ]]; then
+              echo "::error::Expected package.json and pnpm-lock.yaml in the repository root, or one flat-root source ZIP there."
+              exit 1
+            fi
+            APP_ROOT="$RUNNER_TEMP/pro-market-intelligence-app"
+            rm -rf "$APP_ROOT"
+            mkdir -p "$APP_ROOT"
+            unzip -q "$SOURCE_ZIP" -d "$APP_ROOT"
+          fi
+          if [[ ! -s "$APP_ROOT/package.json" || ! -s "$APP_ROOT/pnpm-lock.yaml" ]]; then
+            echo "::error::The app root must directly contain package.json and pnpm-lock.yaml; nested project folders are not supported."
+            exit 1
+          fi
+          test -s "$APP_ROOT/capacitor.config.ts"
+          test -s "$APP_ROOT/android/gradlew"
+          test -s "$APP_ROOT/android/gradle/wrapper/gradle-wrapper.jar"
+          echo "PROJECT_DIR=$APP_ROOT" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.0
+          run_install: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Check stable app origin
+        shell: bash
+        env:
+          PMI_APP_URL: ${{ vars.PMI_APP_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PMI_APP_URL" ]]; then
+            echo "::error::Set the repository variable PMI_APP_URL to the stable HTTPS app origin before running this workflow."
+            exit 1
+          fi
+          node --input-type=module <<'JS'
+          const raw = process.env.PMI_APP_URL;
+          const url = new URL(raw);
+          if (
+            url.protocol !== "https:" ||
+            url.pathname !== "/" ||
+            url.search ||
+            url.hash ||
+            url.username ||
+            url.password
+          ) {
+            throw new Error(
+              "PMI_APP_URL must be a stable HTTPS origin with no path, query, credentials, or fragment.",
+            );
+          }
+          JS
+
+      - name: Verify app and API origin are reachable
+        shell: bash
+        env:
+          PMI_APP_URL: ${{ vars.PMI_APP_URL }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${PMI_APP_URL%/}"
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 3 --max-time 30 "$BASE_URL/" >/dev/null
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 3 --max-time 30 "$BASE_URL/api/health" >/dev/null
+
+      - name: Check preinstalled Android SDK (no SDK installation or license auto-acceptance)
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?The hosted runner did not provide ANDROID_HOME}"
+          test -d "$ANDROID_HOME/platforms/android-35" || {
+            echo "::error::Android SDK Platform 35 is missing from this runner image."
+            exit 1
+          }
+          test -d "$ANDROID_HOME/build-tools/35.0.0" || {
+            echo "::error::Android Build Tools 35.0.0 are missing from this runner image."
+            exit 1
+          }
+          java -version
+          node --version
+          pnpm --version
+
+      - name: Install, verify, and build
+        shell: bash
+        env:
+          PMI_APP_URL: ${{ vars.PMI_APP_URL }}
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          pnpm install --frozen-lockfile
+          pnpm check
+          pnpm test
+          pnpm build
+          pnpm exec cap sync android
+          cd android
+          bash ./gradlew --no-daemon assembleDebug
+          cd "$PROJECT_DIR"
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Confirm provider secret is absent from packaged web assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          ASSETS="android/app/src/main/assets/public"
+          test -d "$ASSETS"
+          if grep -R --binary-files=without-match -l 'TWELVE_DATA_API_KEY' "$ASSETS"; then
+            echo "::error::The server-side provider-key identifier appeared in packaged WebView assets. Refusing to upload the APK."
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/artifact-output"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/artifact-output/ProMarket-Intelligence-debug.apk"
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pro-Market-Intelligence-debug-apk
+          path: artifact-output/ProMarket-Intelligence-debug.apk
+          if-no-files-found: error
+          retention-days: 7
