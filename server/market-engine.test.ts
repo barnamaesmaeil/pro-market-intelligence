@@ -60,7 +60,9 @@ describe("causal market analysis", () => {
     up[4] = { ...up[4], open: 8.5 };
     const upAnalysis = analyzeMarket(up);
     expect(upAnalysis?.events.some(e => e.kind === "BOS_UP")).toBe(true);
-    expect(upAnalysis?.events.some(e => e.kind === "ORDER_BLOCK_BULL")).toBe(true);
+    expect(upAnalysis?.events.some(e => e.kind === "ORDER_BLOCK_BULL")).toBe(
+      true
+    );
 
     const reversal = [
       candle(0, 9.2, 10, 8, 9),
@@ -73,7 +75,9 @@ describe("causal market analysis", () => {
       candle(7, 12.5, 15, 12, 14),
     ];
     const reversalAnalysis = analyzeMarket(reversal);
-    expect(reversalAnalysis?.events.some(e => e.kind === "BOS_DOWN")).toBe(true);
+    expect(reversalAnalysis?.events.some(e => e.kind === "BOS_DOWN")).toBe(
+      true
+    );
     const choch = reversalAnalysis?.events.find(e => e.kind === "CHOCH_UP");
     expect(choch?.confirmedAt).toBe(reversal[7].time);
 
